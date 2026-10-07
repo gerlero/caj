@@ -22,7 +22,7 @@ def serialize_jaxpr(f: Writer[bytes], jaxpr: Any, /) -> None:
 
 
 # Workaround for https://github.com/patrick-kidger/equinox/issues/1255
-def serialize_filter_spec(f: Writer[bytes], x: object, /) -> None:
+def _serialize_filter_spec(f: Writer[bytes], x: object, /) -> None:
     if isinstance(x, jax.Array) and jnp.issubdtype(x.dtype, jax.dtypes.prng_key):
         x = jax.random.key_data(x)
     return eqx.default_serialise_filter_spec(f, x)
@@ -41,7 +41,7 @@ def serialize_pytree(
         assert not issubclass(exc_workaround, RuntimeError)
 
         try:
-            eqx.tree_serialise_leaves(f, pytree, filter_spec=serialize_filter_spec)
+            eqx.tree_serialise_leaves(f, pytree, filter_spec=_serialize_filter_spec)
         except RuntimeError as e:
             cause = e.__cause__
             while isinstance(cause, RuntimeError):
@@ -50,11 +50,11 @@ def serialize_pytree(
                 raise cause from e  # ty: ignore[invalid-raise]
             raise
     else:
-        eqx.tree_serialise_leaves(f, pytree, filter_spec=serialize_filter_spec)
+        eqx.tree_serialise_leaves(f, pytree, filter_spec=_serialize_filter_spec)
 
 
 # Workaround for https://github.com/patrick-kidger/equinox/issues/1255
-def deserialize_filter_spec(f: SupportsReadSeek[bytes], x: object, /) -> object:
+def _deserialize_filter_spec(f: SupportsReadSeek[bytes], x: object, /) -> object:
     ret = eqx.default_deserialise_filter_spec(f, x)
     if isinstance(x, (jax.Array, jax.ShapeDtypeStruct)) and jnp.issubdtype(
         x.dtype, jax.dtypes.prng_key
@@ -67,5 +67,5 @@ def deserialize_filter_spec(f: SupportsReadSeek[bytes], x: object, /) -> object:
 
 def deserialize_pytree[T](f: SupportsReadSeek[bytes], /, *, like: T) -> T:
     return eqx.tree_deserialise_leaves(
-        f, like=like, filter_spec=deserialize_filter_spec
+        f, like=like, filter_spec=_deserialize_filter_spec
     )
