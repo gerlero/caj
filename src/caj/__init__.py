@@ -48,7 +48,7 @@ def cache[**P, R](
     /,
     *,
     dir: str | os.PathLike[str] | _MISSING = _MISSING,
-    max_bytes: int | _MISSING = _MISSING,
+    max_bytes: int | None | _MISSING = _MISSING,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     if dir is not _MISSING:
         dir = Path(dir).absolute()
