@@ -18,6 +18,7 @@
 Decorate a function with `@cache`, and **caj** will store the return on disk. Later calls with the same inputs will load the result directly from the cache instead of performing the computation again.
 
 ```python
+import jax
 import jax.numpy as jnp
 from caj import cache
 
