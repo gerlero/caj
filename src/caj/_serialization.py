@@ -1,71 +1,165 @@
 import sys
-from typing import Any
+from typing import IO, Any
 
 if sys.version_info >= (3, 14):
     from io import Writer
 else:
     from typing_extensions import Writer
 
-import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jaxlib
+import numpy as np
 
-from ._typing import SupportsReadSeek
+
+def dump_pytree(f: Writer[bytes], pytree: object, /) -> None:
+    leaves, _ = jax.tree.flatten(pytree)
+
+    for leaf in leaves:
+        match leaf:
+            case (
+                jax.Array(ndim=0, weak_type=True)
+                | jax.ShapeDtypeStruct(ndim=0, weak_type=True)
+            ):
+                jnp.save(f, leaf, allow_pickle=False)
+
+            case jax.Array(weak_type=True) | jax.ShapeDtypeStruct(weak_type=True):
+                raise NotImplementedError(
+                    "non-scalar JAX arrays with weak_type=True are not supported"
+                )
+
+            case jax.Array():
+                if jnp.issubdtype(leaf.dtype, jax.dtypes.prng_key):
+                    leaf = jax.random.key_data(leaf)
+
+                jnp.save(f, leaf, allow_pickle=False)
+
+            case np.ndarray() | float() | int() | complex() | bool() | np.generic():
+                np.save(f, leaf, allow_pickle=False)
 
 
-def serialize_jaxpr(f: Writer[bytes], jaxpr: Any, /) -> None:
+def load_pytree[T](f: IO[bytes], /, *, like: T) -> T:
+    leaves_with_path, treedef = jax.tree.flatten_with_path(like)
+    leaves = []
+
+    try:
+        for path, like_leaf in leaves_with_path:
+            match like_leaf:
+                case (
+                    jax.Array(ndim=0, weak_type=True)
+                    | jax.ShapeDtypeStruct(ndim=0, weak_type=True)
+                ):
+                    leaf = jnp.load(f, allow_pickle=False)
+                    if not isinstance(leaf, jax.Array):
+                        raise TypeError(
+                            f"expected JAX scalar array for {path}, got {type(leaf)}"
+                        )
+                    if leaf.dtype != like_leaf.dtype:
+                        raise TypeError(
+                            f"expected JAX scalar array with dtype {like_leaf.dtype} for {path}, got {leaf.dtype}"
+                        )
+                    if leaf.ndim != 0:
+                        raise ValueError(
+                            f"expected JAX scalar array for {path}, got array with shape {leaf.shape}"
+                        )
+                    leaf = jnp.array(leaf.item())
+                    assert leaf.ndim == 0
+                    assert leaf.dtype == like_leaf.dtype
+                    assert leaf.weak_type
+
+                case jax.Array() | jax.ShapeDtypeStruct():
+                    leaf = jnp.load(f, allow_pickle=False)
+                    if not isinstance(leaf, jax.Array):
+                        raise TypeError(
+                            f"expected JAX array for {path}, got {type(leaf)}"
+                        )
+
+                    if jnp.issubdtype(like_leaf.dtype, jax.dtypes.prng_key):
+                        leaf = jax.random.wrap_key_data(
+                            leaf,
+                            impl=jax.random.key_impl(
+                                jnp.zeros((), dtype=like_leaf.dtype)
+                            ),
+                        )
+                        assert isinstance(leaf, jax.Array)
+                        assert jnp.issubdtype(leaf.dtype, jax.dtypes.prng_key)
+                    elif like_leaf.weak_type and not leaf.weak_type:
+                        assert leaf.ndim != 0
+                        raise NotImplementedError(
+                            f"non-scalar JAX array with weak_type=True at {path} is not supported"
+                        )
+
+                    if leaf.dtype != like_leaf.dtype:
+                        raise TypeError(
+                            f"expected JAX array with dtype {like_leaf.dtype} for {path}, got {leaf.dtype}"
+                        )
+                    if leaf.shape != like_leaf.shape:
+                        raise ValueError(
+                            f"expected JAX array with shape {like_leaf.shape} for {path}, got {leaf.shape}"
+                        )
+
+                case np.ndarray():
+                    leaf = np.load(f, allow_pickle=False)
+                    if not isinstance(leaf, np.ndarray):
+                        raise TypeError(
+                            f"expected NumPy array for {path}, got {type(leaf)}"
+                        )
+                    if leaf.dtype != like_leaf.dtype:
+                        raise TypeError(
+                            f"expected NumPy array with dtype {like_leaf.dtype} for {path}, got {leaf.dtype}"
+                        )
+                    if leaf.shape != like_leaf.shape:
+                        raise ValueError(
+                            f"expected NumPy array with shape {like_leaf.shape} for {path}, got {leaf.shape}"
+                        )
+
+                case np.generic():
+                    leaf = np.load(f, allow_pickle=False)
+                    if not isinstance(leaf, np.ndarray):
+                        raise TypeError(
+                            f"expected {type(like_leaf)} for {path}, got {type(leaf)}"
+                        )
+                    if leaf.ndim != 0:
+                        raise ValueError(
+                            f"expected scalar {type(like_leaf)} for {path}, got array with shape {leaf.shape}"
+                        )
+                    leaf = leaf.flat[0]
+                    if type(leaf) is not type(like_leaf):
+                        raise TypeError(
+                            f"expected {type(like_leaf)} for {path}, got {type(leaf)}"
+                        )
+
+                case float() | int() | complex() | bool():
+                    leaf = np.load(f, allow_pickle=False)
+                    if not isinstance(leaf, np.ndarray):
+                        raise TypeError(
+                            f"expected {type(like_leaf)} for {path}, got {type(leaf)}"
+                        )
+                    if leaf.ndim != 0:
+                        raise ValueError(
+                            f"expected scalar {type(like_leaf)} for {path}, got array with shape {leaf.shape}"
+                        )
+                    leaf = leaf.item()
+                    if type(leaf) is not type(like_leaf):
+                        raise TypeError(
+                            f"expected {type(like_leaf)} for {path}, got {type(leaf)}"
+                        )
+
+                case _:
+                    leaf = like_leaf
+
+            leaves.append(leaf)
+    except EOFError as e:
+        raise TypeError(f"missing leaf for {path} (expected {type(like_leaf)})") from e
+
+    if f.read(1):
+        raise TypeError("extra data after reading all leaves")
+
+    return treedef.unflatten(leaves)
+
+
+def dump_jaxpr(f: Writer[bytes], jaxpr: Any, /) -> None:
     f.write(jax.__version__.encode())
     f.write(jaxlib.__version__.encode())
     f.write(str(jaxpr).encode())
-    serialize_pytree(f, jaxpr.consts)
-
-
-# Workaround for https://github.com/patrick-kidger/equinox/issues/1255
-def _serialize_filter_spec(f: Writer[bytes], x: object, /) -> None:
-    if isinstance(x, jax.Array) and jnp.issubdtype(x.dtype, jax.dtypes.prng_key):
-        x = jax.random.key_data(x)
-    return eqx.default_serialise_filter_spec(f, x)
-
-
-def serialize_pytree(
-    f: Writer[bytes],
-    pytree: object,
-    /,
-    *,
-    exc_workaround: type[Exception] | None = None,
-) -> None:
-    if exc_workaround is not None:
-        # Workaround for https://github.com/patrick-kidger/equinox/issues/1255
-        assert issubclass(exc_workaround, Exception)
-        assert not issubclass(exc_workaround, RuntimeError)
-
-        try:
-            eqx.tree_serialise_leaves(f, pytree, filter_spec=_serialize_filter_spec)
-        except RuntimeError as e:
-            cause = e.__cause__
-            while isinstance(cause, RuntimeError):
-                cause = cause.__cause__
-            if isinstance(cause, exc_workaround):
-                raise cause from e  # ty: ignore[invalid-raise]
-            raise
-    else:
-        eqx.tree_serialise_leaves(f, pytree, filter_spec=_serialize_filter_spec)
-
-
-# Workaround for https://github.com/patrick-kidger/equinox/issues/1255
-def _deserialize_filter_spec(f: SupportsReadSeek[bytes], x: object, /) -> object:
-    ret = eqx.default_deserialise_filter_spec(f, x)
-    if isinstance(x, (jax.Array, jax.ShapeDtypeStruct)) and jnp.issubdtype(
-        x.dtype, jax.dtypes.prng_key
-    ):
-        return jax.random.wrap_key_data(
-            ret, impl=jax.random.key_impl(jnp.zeros((), x.dtype))
-        )
-    return ret
-
-
-def deserialize_pytree[T](f: SupportsReadSeek[bytes], /, *, like: T) -> T:
-    return eqx.tree_deserialise_leaves(
-        f, like=like, filter_spec=_deserialize_filter_spec
-    )
+    dump_pytree(f, jaxpr.consts)

@@ -14,7 +14,7 @@ import jax
 from platformdirs import user_cache_path
 
 from ._cache import Cache
-from ._serialization import deserialize_pytree, serialize_jaxpr, serialize_pytree
+from ._serialization import dump_jaxpr, dump_pytree, load_pytree
 from ._writers import HashWriter, WriteLimitError
 
 DEFAULT_CACHE_DIR = user_cache_path(__package__)
@@ -77,18 +77,18 @@ def cache[**P, R](
             h = hashlib.blake2b(digest_size=16)
 
             f = HashWriter(h)
-            serialize_jaxpr(f, jaxpr)
-            serialize_pytree(f, args)
-            serialize_pytree(f, kwargs)
+            dump_jaxpr(f, jaxpr)
+            dump_pytree(f, args)
+            dump_pytree(f, kwargs)
 
             key = h.hexdigest()
 
             try:
                 with cache.read(key) as f:
-                    ret = deserialize_pytree(f, like=ret_shape)
+                    ret = load_pytree(f, like=ret_shape)
             except KeyError:
                 pass
-            except (OSError, RuntimeError) as e:
+            except (OSError, TypeError, ValueError) as e:
                 warn(
                     f"{__package__}: failed to load cached entry: {e}",
                     RuntimeWarning,
@@ -101,7 +101,7 @@ def cache[**P, R](
 
             try:
                 with cache.write(key) as f:
-                    serialize_pytree(f, ret, exc_workaround=WriteLimitError)
+                    dump_pytree(f, ret)
             except (OSError, WriteLimitError) as e:
                 warn(
                     f"{__package__}: failed to save cache to {cache.dir}: {e}",

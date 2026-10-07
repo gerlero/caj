@@ -4,6 +4,7 @@ import sys
 import time
 from collections.abc import Generator
 from pathlib import Path
+from typing import IO
 from warnings import warn
 
 if sys.version_info >= (3, 14):
@@ -13,7 +14,6 @@ else:
 
 from safewrite import atomic_write
 
-from ._typing import SupportsReadSeek
 from ._writers import BoundedWriter
 
 
@@ -25,7 +25,7 @@ class Cache:
         self.max_bytes = max_bytes
 
     @contextlib.contextmanager
-    def read(self, key: str, /) -> Generator[SupportsReadSeek[bytes], None, None]:
+    def read(self, key: str, /) -> Generator[IO[bytes], None, None]:
         path = self._path(key)
         try:
             f = path.open("rb")
