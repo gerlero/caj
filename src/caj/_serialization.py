@@ -152,9 +152,6 @@ def load_pytree[T](f: IO[bytes], /, *, like: T) -> T:
     except EOFError as e:
         raise TypeError(f"missing leaf for {path} (expected {type(like_leaf)})") from e
 
-    if f.read(1):
-        raise TypeError("extra data after reading all leaves")
-
     return treedef.unflatten(leaves)
 
 
