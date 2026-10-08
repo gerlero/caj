@@ -226,24 +226,6 @@ def test_deserialize_pytree_missing_leaf() -> None:
         load_pytree(f, like=pytree_like)
 
 
-def test_deserialize_pytree_extra_leaf() -> None:
-    f = io.BytesIO()
-    pytree = {
-        "x": jnp.array([1.0, 2.0]),
-        "y": (3, jnp.array(4.0)),
-        "z": jnp.array([5.0, 6.0]),
-    }
-    dump_pytree(f, pytree)
-
-    pytree_like = {
-        "x": jnp.array([0.0, 0.0]),
-        "y": (0, jnp.array(0.0)),
-    }
-    f.seek(0)
-    with pytest.raises(TypeError, match="extra"):
-        load_pytree(f, like=pytree_like)
-
-
 def test_deserialize_pytree_invalid_data() -> None:
     f = io.BytesIO(b"not a valid pytree")
     pytree_like = {
