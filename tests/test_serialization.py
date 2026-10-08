@@ -30,7 +30,7 @@ from caj._serialization import dump_jaxpr, dump_pytree, load_pytree
 )
 def test_array_roundtrip(array: jax.Array | np.ndarray) -> None:
     f = io.BytesIO()
-    dump_pytree(f, array)
+    dump_pytree(array, f)
 
     f.seek(0)
     result = load_pytree(f, like=(array + array))
@@ -50,7 +50,7 @@ def test_pytree_roundtrip() -> None:
     }
 
     f = io.BytesIO()
-    dump_pytree(f, pytree)
+    dump_pytree(pytree, f)
 
     pytree_like = {
         "w": jnp.array([0.0, 0.0]),
@@ -80,7 +80,7 @@ def test_prng_key_roundtrip() -> None:
     key = jax.random.key(42)
 
     f = io.BytesIO()
-    dump_pytree(f, key)
+    dump_pytree(key, f)
 
     f.seek(0)
     result = load_pytree(f, like=key)
@@ -120,7 +120,7 @@ def test_prng_key_roundtrip() -> None:
 )
 def test_scalar_roundtrip(scalar: object) -> None:
     f = io.BytesIO()
-    dump_pytree(f, scalar)
+    dump_pytree(scalar, f)
 
     f.seek(0)
     result = load_pytree(f, like=scalar)
@@ -141,8 +141,8 @@ def test_serialize_jaxpr_is_deterministic() -> None:
     f1 = io.BytesIO()
     f2 = io.BytesIO()
 
-    dump_jaxpr(f1, jaxpr)
-    dump_jaxpr(f2, jaxpr)
+    dump_jaxpr(jaxpr, f1)
+    dump_jaxpr(jaxpr, f2)
 
     assert f1.getvalue() == f2.getvalue()
 
@@ -154,8 +154,8 @@ def test_serialize_jaxpr_depends_on_jaxpr() -> None:
     f1 = io.BytesIO()
     f2 = io.BytesIO()
 
-    dump_jaxpr(f1, jaxpr1)
-    dump_jaxpr(f2, jaxpr2)
+    dump_jaxpr(jaxpr1, f1)
+    dump_jaxpr(jaxpr2, f2)
 
     assert f1.getvalue() != f2.getvalue()
 
@@ -172,8 +172,8 @@ def test_serialize_jaxpr_depends_on_consts() -> None:
     f1 = io.BytesIO()
     f2 = io.BytesIO()
 
-    dump_jaxpr(f1, jaxpr1)
-    dump_jaxpr(f2, jaxpr2)
+    dump_jaxpr(jaxpr1, f1)
+    dump_jaxpr(jaxpr2, f2)
 
     assert f1.getvalue() != f2.getvalue()
 
@@ -181,7 +181,7 @@ def test_serialize_jaxpr_depends_on_consts() -> None:
 def test_deserialize_array_different_dtype() -> None:
     f = io.BytesIO()
     array = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float32)
-    dump_pytree(f, array)
+    dump_pytree(array, f)
 
     f.seek(0)
     with pytest.raises(TypeError, match="dtype"):
@@ -191,7 +191,7 @@ def test_deserialize_array_different_dtype() -> None:
 def test_deserialize_array_different_shape() -> None:
     f = io.BytesIO()
     array = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float32)
-    dump_pytree(f, array)
+    dump_pytree(array, f)
 
     f.seek(0)
     with pytest.raises(ValueError, match="shape"):
@@ -201,7 +201,7 @@ def test_deserialize_array_different_shape() -> None:
 def test_deserialize_scalar_different_type() -> None:
     f = io.BytesIO()
     scalar = 3.14
-    dump_pytree(f, scalar)
+    dump_pytree(scalar, f)
 
     f.seek(0)
     with pytest.raises(TypeError, match="expected"):
@@ -214,7 +214,7 @@ def test_deserialize_pytree_missing_leaf() -> None:
         "x": jnp.array([1.0, 2.0]),
         "y": (3, jnp.array(4.0)),
     }
-    dump_pytree(f, pytree)
+    dump_pytree(pytree, f)
 
     pytree_like = {
         "x": jnp.array([0.0, 0.0]),
@@ -242,11 +242,11 @@ def test_unsupported_weak_type_jax_array() -> None:
     weak_array = jnp.broadcast_to(jnp.array(1), (3,))
     assert weak_array.weak_type
     with pytest.raises(NotImplementedError, match="weak_type=True"):
-        dump_pytree(f, weak_array)
+        dump_pytree(weak_array, f)
 
     f.seek(0)
     f.truncate()
-    dump_pytree(f, jnp.arange(3))
+    dump_pytree(jnp.arange(3), f)
 
     f.seek(0)
     with pytest.raises(NotImplementedError, match="weak_type=True"):
