@@ -1,13 +1,12 @@
 import struct
 import sys
-from typing import IO
 
 from caj._utils import readexact
 
 if sys.version_info >= (3, 14):
-    from io import Writer
+    from io import Reader, Writer
 else:
-    from typing_extensions import Writer
+    from typing_extensions import Reader, Writer
 
 import jax
 import jax.numpy as jnp
@@ -56,7 +55,7 @@ def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
                 f.write(struct.pack("dd", leaf.real, leaf.imag))
 
 
-def load_pytree[T](f: IO[bytes], /, *, like: T) -> T:
+def load_pytree[T](f: Reader[bytes], /, *, like: T) -> T:
     leaves_with_path, treedef = jax.tree.flatten_with_path(like)
     leaves = []
 
