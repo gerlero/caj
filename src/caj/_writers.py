@@ -1,6 +1,6 @@
 import sys
 from collections.abc import Buffer
-from typing import override
+from typing import Protocol, override
 
 if sys.version_info >= (3, 14):
     from io import Writer
@@ -8,11 +8,12 @@ else:
     from typing_extensions import Writer
 
 
-from ._typing import SupportsUpdate
+class _SupportsUpdate(Protocol):
+    def update(self, data: Buffer, /) -> None: ...
 
 
 class HashWriter(Writer[Buffer]):
-    def __init__(self, hasher: SupportsUpdate, /) -> None:
+    def __init__(self, hasher: _SupportsUpdate, /) -> None:
         self._hasher = hasher
 
     @override
