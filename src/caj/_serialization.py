@@ -1,6 +1,6 @@
 import struct
 import sys
-from typing import IO, Any
+from typing import IO
 
 from caj._utils import readexact
 
@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import jaxlib
 import numpy as np
+from jax.extend.core import Jaxpr
 
 
 def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
@@ -148,8 +149,22 @@ def load_pytree[T](f: IO[bytes], /, *, like: T) -> T:
     return treedef.unflatten(leaves)
 
 
-def dump_jaxpr(jaxpr: Any, f: Writer[bytes], /) -> None:
+def _dump_jaxpr_consts(jaxpr: Jaxpr, f: Writer[bytes], /) -> None:
+    assert isinstance(jaxpr, Jaxpr)
+
+    dump_pytree(jaxpr.consts, f)
+
+    for eqn in jaxpr.eqns:
+        leaves, _ = jax.tree.flatten(eqn.params)
+        for leaf in leaves:
+            if isinstance(leaf, Jaxpr):
+                _dump_jaxpr_consts(leaf, f)
+
+
+def dump_jaxpr(jaxpr: Jaxpr, f: Writer[bytes], /) -> None:
+    assert isinstance(jaxpr, Jaxpr)
+
     f.write(jax.__version__.encode())
     f.write(jaxlib.__version__.encode())
     f.write(str(jaxpr).encode())
-    dump_pytree(jaxpr.consts, f)
+    _dump_jaxpr_consts(jaxpr, f)

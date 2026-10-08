@@ -47,3 +47,22 @@ def test_random_keys(tmp_path: Path) -> None:
     key = jax.random.key(42)
 
     assert jnp.allclose(f(key), f(key))
+
+
+def test_nested_jaxpr_consts(tmp_path: Path) -> None:
+    def make_f(value):
+        a = jnp.array([value])
+
+        @cache(dir=tmp_path)
+        @jax.jit
+        def f(x):
+            return x + a
+
+        return f
+
+    f1 = make_f(1.0)
+    f2 = make_f(2.0)
+
+    x = jnp.array([10.0])
+
+    assert f1(x) != f2(x)
