@@ -12,7 +12,7 @@ import jaxlib
 import numpy as np
 
 
-def dump_pytree(f: Writer[bytes], pytree: object, /) -> None:
+def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
     leaves, _ = jax.tree.flatten(pytree)
 
     for leaf in leaves:
@@ -155,8 +155,8 @@ def load_pytree[T](f: IO[bytes], /, *, like: T) -> T:
     return treedef.unflatten(leaves)
 
 
-def dump_jaxpr(f: Writer[bytes], jaxpr: Any, /) -> None:
+def dump_jaxpr(jaxpr: Any, f: Writer[bytes], /) -> None:
     f.write(jax.__version__.encode())
     f.write(jaxlib.__version__.encode())
     f.write(str(jaxpr).encode())
-    dump_pytree(f, jaxpr.consts)
+    dump_pytree(jaxpr.consts, f)

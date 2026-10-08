@@ -77,9 +77,9 @@ def cache[**P, R](
             h = hashlib.blake2b(digest_size=16)
 
             f = HashWriter(h)
-            dump_jaxpr(f, jaxpr)
-            dump_pytree(f, args)
-            dump_pytree(f, kwargs)
+            dump_jaxpr(jaxpr, f)
+            dump_pytree(args, f)
+            dump_pytree(kwargs, f)
 
             key = h.hexdigest()
 
@@ -101,7 +101,7 @@ def cache[**P, R](
 
             try:
                 with cache.write(key) as f:
-                    dump_pytree(f, ret)
+                    dump_pytree(ret, f)
             except (OSError, WriteLimitError) as e:
                 warn(
                     f"{__package__}: failed to save cache to {cache.dir}: {e}",
