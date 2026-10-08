@@ -6,7 +6,7 @@ from caj import cache
 
 
 def test_culling(tmp_path: Path) -> None:
-    @cache(dir=tmp_path, max_bytes=1_000)
+    @cache(dir=tmp_path, max_bytes=25)
     def f(x):
         return x + 1
 

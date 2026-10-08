@@ -15,7 +15,7 @@ from platformdirs import user_cache_path
 
 from ._cache import Cache
 from ._serialization import dump_jaxpr, dump_pytree, load_pytree
-from ._writers import HashWriter, WriteLimitError
+from ._utils import HashWriter, WriteLimitError
 
 DEFAULT_CACHE_DIR = user_cache_path(__package__)
 DEFAULT_CACHE_MAX_BYTES = 1_000_000_000
@@ -86,9 +86,11 @@ def cache[**P, R](
             try:
                 with cache.read(key) as f:
                     ret = load_pytree(f, like=ret_shape)
+                    if f.read(1):
+                        raise EOFError("extra data at end of cache entry")
             except KeyError:
                 pass
-            except (OSError, TypeError, ValueError) as e:
+            except (OSError, EOFError) as e:
                 warn(
                     f"{__package__}: failed to load cached entry: {e}",
                     RuntimeWarning,

@@ -14,7 +14,7 @@ else:
 
 from safewrite import atomic_write
 
-from ._writers import BoundedWriter
+from ._utils import BoundedWriter
 
 
 class Cache:
