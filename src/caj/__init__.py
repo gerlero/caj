@@ -87,10 +87,10 @@ def cache[**P, R](
                 with cache.read(key) as f:
                     ret = load_pytree(f, like=ret_shape)
                     if f.read(1):
-                        raise EOFError("extra data at end of cache entry")
-            except KeyError:
+                        raise RuntimeError("extra data after reading cached entry")
+            except (FileNotFoundError, EOFError):
                 pass
-            except (OSError, EOFError) as e:
+            except (OSError, RuntimeError) as e:
                 warn(
                     f"{__package__}: failed to load cached entry: {e}",
                     RuntimeWarning,
@@ -104,6 +104,8 @@ def cache[**P, R](
             try:
                 with cache.write(key) as f:
                     dump_pytree(ret, f)
+            except FileExistsError:
+                pass
             except (OSError, WriteLimitError) as e:
                 warn(
                     f"{__package__}: failed to save cache to {cache.dir}: {e}",

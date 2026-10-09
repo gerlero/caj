@@ -30,8 +30,9 @@ def test_bad_entry(tmp_path: Path) -> None:
     [entry] = tmp_path.glob("*.caj")
     entry.write_bytes(b"bad")
 
-    with pytest.warns(RuntimeWarning, match="caj: failed to load"):
-        assert f(x) == 2.0
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    assert entry.read_bytes() != b"bad"
 
 
 def test_save_failure(
