@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import jax.numpy as jnp
-
 from caj import cache
 
 
@@ -10,7 +8,13 @@ def test_culling(tmp_path: Path) -> None:
     def f(x):
         return x + 1
 
-    for i in range(100):
-        assert f(jnp.array(i)) == i + 1
+    assert f(0) == 1
+    [first] = tmp_path.glob("*.caj")
+    size = first.stat().st_size
 
-    assert 5 < len(list(tmp_path.glob("*.caj"))) < 10
+    for i in range(1, 25 // size + 1):
+        assert len(list(tmp_path.glob("*.caj"))) == i
+        assert f(i) == i + 1
+
+    assert len(list(tmp_path.glob("*.caj"))) == 25 // size
+    assert not first.exists()
