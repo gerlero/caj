@@ -12,8 +12,6 @@ if sys.version_info >= (3, 14):
 else:
     from typing_extensions import Writer
 
-from safewrite import atomic_write
-
 from ._utils import BoundedWriter
 
 
@@ -26,22 +24,16 @@ class Cache:
 
     @contextlib.contextmanager
     def read(self, key: str, /) -> Generator[IO[bytes], None, None]:
-        path = self._path(key)
-        try:
-            f = path.open("rb")
-        except FileNotFoundError as e:
-            raise KeyError(key) from e
-        try:
+        with self._path(key).open("rb") as f, self._delete_on_error(key):
             yield f
-        finally:
-            f.close()
         self._hit(key)
 
     @contextlib.contextmanager
     def write(self, key: str, /) -> Generator[Writer[bytes], None, None]:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with atomic_write(path, mode="wb") as f:
+        f = path.open("xb")
+        with self._delete_on_error(key), f:
             if self.max_bytes is not None:
                 f = BoundedWriter(f, max_bytes=self.max_bytes)
             yield f
@@ -54,6 +46,17 @@ class Cache:
         path = self._path(key)
         with contextlib.suppress(OSError):
             os.utime(path, ns=(time.time_ns(), path.stat().st_mtime_ns))
+
+    @contextlib.contextmanager
+    def _delete_on_error(self, key: str, /) -> Generator[None, None, None]:
+        try:
+            yield
+        except:
+            path = self._path(key)
+            with contextlib.suppress(OSError):
+                if not path.is_symlink():
+                    path.unlink()
+            raise
 
     def _cull(self) -> None:
         if self.max_bytes is None:
