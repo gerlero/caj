@@ -119,3 +119,27 @@ def test_nested_jaxpr_consts(tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
     assert f1(x) != f2(x)
     [_, _] = tmp_path.glob("*.caj")
+
+
+def test_no_input_confusion(tmp_path: Path) -> None:
+    x = {"a": jnp.array([1.0, 2.0]), "b": jnp.array([3.0, 4.0])}
+
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f1(x):
+        return x["a"]
+
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f2(x):
+        return x["b"]
+
+    [] = tmp_path.glob("*.caj")
+
+    f1(x)
+    [_] = tmp_path.glob("*.caj")
+
+    f2(x)
+    [_, _] = tmp_path.glob("*.caj")
