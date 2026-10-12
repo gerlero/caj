@@ -72,6 +72,8 @@ def cache[**P, R](
 
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            args, kwargs = jax.device_put((args, kwargs))
+
             jaxpr, ret_shape = jaxpr_func(*args, **kwargs)
 
             h = hashlib.blake2b(digest_size=16)

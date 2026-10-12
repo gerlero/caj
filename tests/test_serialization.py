@@ -18,22 +18,16 @@ from caj._serialization import dump_jaxpr, dump_pytree, load_pytree
         jnp.array([1.0, 2.0, 3.0], dtype=jnp.complex64),
         jnp.array([1, 2, 3], dtype=jnp.int32),
         jnp.array([True, False, True], dtype=jnp.bool_),
-        np.array([1.0, 2.0, 3.0]),
-        np.array([1.0, 2.0, 3.0], dtype=np.float16),
-        np.array([1.0, 2.0, 3.0], dtype=np.float32),
-        np.array([1.0, 2.0, 3.0], dtype=np.complex64),
-        np.array([1.0, 2.0, 3.0], dtype=np.complex128),
-        np.array([1, 2, 3], dtype=np.int32),
-        np.array([1, 2, 3], dtype=np.int64),
-        np.array([True, False, True], dtype=np.bool_),
     ],
 )
-def test_array_roundtrip(array: jax.Array | np.ndarray) -> None:
+def test_array_roundtrip(array: jax.Array) -> None:
     f = io.BytesIO()
     dump_pytree(array, f)
 
     f.seek(0)
-    result = load_pytree(f, like=(array + array))
+    result = load_pytree(
+        f, like=jax.ShapeDtypeStruct(shape=array.shape, dtype=array.dtype)
+    )
 
     assert type(result) is type(array)
     assert result.dtype == array.dtype
@@ -43,35 +37,30 @@ def test_array_roundtrip(array: jax.Array | np.ndarray) -> None:
 
 def test_pytree_roundtrip() -> None:
     pytree = {
-        "w": jnp.array([1.0, 2.0]),
-        "x": "strings are not serialized",
-        "y": (3, jnp.array(4.0, dtype=jnp.bfloat16)),
-        "z": np.array([5.0, 6.0, 7.0]),
+        "x": jnp.array([1.0, 2.0]),
+        "y": (jnp.array(3), jnp.array(4.0, dtype=jnp.bfloat16)),
+        "z": jnp.array([5.0, 6.0, 7.0]),
     }
 
     f = io.BytesIO()
     dump_pytree(pytree, f)
 
     pytree_like = {
-        "w": jnp.array([0.0, 0.0]),
-        "x": "some other string",
-        "y": (0, jnp.array(0.0, dtype=jnp.bfloat16)),
-        "z": np.array([0.0, 0.0, 0.0]),
+        "x": jnp.array([0.0, 0.0]),
+        "y": (jnp.array(0), jnp.array(0.0, dtype=jnp.bfloat16)),
+        "z": jnp.array([0.0, 0.0, 0.0]),
     }
     f.seek(0)
     result = load_pytree(f, like=pytree_like)
 
     assert jax.tree.structure(result) == jax.tree.structure(pytree)
-    assert isinstance(result["w"], jax.Array)
-    assert result["w"].dtype == pytree["w"].dtype
-    assert jnp.array_equal(result["w"], pytree["w"])
-    assert isinstance(result["x"], str)
-    assert result["x"] == pytree_like["x"]
+    assert isinstance(result["x"], jax.Array)
+    assert jnp.array_equal(result["x"], pytree["x"])
     assert isinstance(result["y"][1], jax.Array)
     assert result["y"][0] == pytree["y"][0]
     assert result["y"][1].dtype == pytree["y"][1].dtype
     assert jnp.array_equal(result["y"][1], pytree["y"][1])
-    assert isinstance(result["z"], np.ndarray)
+    assert isinstance(result["z"], jax.Array)
     assert result["z"].dtype == pytree["z"].dtype
     assert np.array_equal(result["z"], pytree["z"])
 
@@ -95,25 +84,14 @@ def test_prng_key_roundtrip() -> None:
 @pytest.mark.parametrize(
     "scalar",
     [
-        3.14,
-        np.float32(3.14),
-        np.float64(3.14),
         jnp.float16(3.14),
         jnp.bfloat16(3.14),
         jnp.float32(3.14),
         jnp.array(3.14),
-        42,
-        np.int32(42),
-        np.int64(42),
         jnp.int32(42),
         jnp.array(42),
-        1 + 2j,
-        np.complex64(1 + 2j),
-        np.complex128(1 + 2j),
         jnp.complex64(1 + 2j),
         jnp.array(1 + 2j),
-        True,
-        np.bool_(True),
         jnp.bool_(True),
         jnp.array(True),
     ],
@@ -182,13 +160,13 @@ def test_deserialize_pytree_missing_leaf() -> None:
     f = io.BytesIO()
     pytree = {
         "x": jnp.array([1.0, 2.0]),
-        "y": (3, jnp.array(4.0)),
+        "y": (jnp.array(3), jnp.array(4.0)),
     }
     dump_pytree(pytree, f)
 
     pytree_like = {
         "x": jnp.array([0.0, 0.0]),
-        "y": (0, jnp.array(0.0)),
+        "y": (jnp.array(0), jnp.array(0.0)),
         "z": jnp.array([5.0, 6.0]),
     }
     f.seek(0)
@@ -197,10 +175,10 @@ def test_deserialize_pytree_missing_leaf() -> None:
 
 
 def test_deserialize_pytree_invalid_data() -> None:
-    f = io.BytesIO(b"not a valid pytree")
+    f = io.BytesIO(b"bad")
     pytree_like = {
         "x": jnp.array([0.0, 0.0]),
-        "y": (0, jnp.array(0.0)),
+        "y": (jnp.array(0), jnp.array(0.0)),
     }
     f.seek(0)
     with pytest.raises(EOFError):
@@ -221,3 +199,31 @@ def test_unsupported_weak_type_jax_array() -> None:
     f.seek(0)
     with pytest.raises(NotImplementedError, match="weak_type=True"):
         load_pytree(f, like=weak_array)
+
+
+def test_unsupported_non_jax_array() -> None:
+    f = io.BytesIO()
+    with pytest.raises(TypeError, match="non-jax.Array"):
+        dump_pytree(np.array([1.0, 2.0]), f)
+
+    f.seek(0)
+    f.truncate()
+    dump_pytree(jnp.arange(3), f)
+
+    f.seek(0)
+    with pytest.raises(TypeError, match="non-jax.Array"):
+        load_pytree(f, like=np.array([0.0, 0.0, 0.0]))
+
+
+def test_unsupported_non_array_leaf() -> None:
+    f = io.BytesIO()
+    with pytest.raises(TypeError, match="non-jax.Array"):
+        dump_pytree({"x": 42}, f)
+
+    f.seek(0)
+    f.truncate()
+    dump_pytree(jnp.arange(3), f)
+
+    f.seek(0)
+    with pytest.raises(TypeError, match="non-jax.Array"):
+        load_pytree(f, like={"x": 0})
