@@ -1,4 +1,3 @@
-import struct
 import sys
 
 from caj._utils import readexact
@@ -11,7 +10,6 @@ else:
 import jax
 import jax.numpy as jnp
 import jaxlib
-import numpy as np
 from jax.extend.core import Jaxpr
 
 
@@ -20,11 +18,6 @@ def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
 
     for leaf in leaves:
         match leaf:
-            case jax.ShapeDtypeStruct():
-                raise jax.errors.ConcretizationTypeError(
-                    leaf, "jax.ShapeDtypeStruct is not supported for serialization"
-                )
-
             case jax.Array(ndim=0, weak_type=True):
                 f.write(leaf.tobytes())
 
@@ -39,20 +32,10 @@ def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
 
                 f.write(leaf.tobytes())
 
-            case np.ndarray() | np.generic():
-                f.write(leaf.tobytes())
-
-            case bool():
-                f.write(struct.pack("?", leaf))
-
-            case int():
-                f.write(struct.pack("q", leaf))
-
-            case float():
-                f.write(struct.pack("d", leaf))
-
-            case complex():
-                f.write(struct.pack("dd", leaf.real, leaf.imag))
+            case _:
+                raise TypeError(
+                    f"non-jax.Array leaf of type {type(leaf)} is not supported"
+                )
 
 
 def load_pytree[T](f: Reader[bytes], /, *, like: T) -> T:
@@ -72,6 +55,11 @@ def load_pytree[T](f: Reader[bytes], /, *, like: T) -> T:
                 assert leaf.ndim == 0
                 assert leaf.dtype == like_leaf.dtype
                 assert leaf.weak_type
+
+            case jax.Array(weak_type=True) | jax.ShapeDtypeStruct(weak_type=True):
+                raise NotImplementedError(
+                    f"non-scalar jax.Array with weak_type=True at {path} is not supported"
+                )
 
             case jax.Array() | jax.ShapeDtypeStruct():
                 if jnp.issubdtype(like_leaf.dtype, jax.dtypes.prng_key):
@@ -97,51 +85,16 @@ def load_pytree[T](f: Reader[bytes], /, *, like: T) -> T:
                     if like_leaf.weak_type and not leaf.weak_type:
                         assert leaf.ndim != 0
                         raise NotImplementedError(
-                            f"non-scalar JAX array with weak_type=True at {path} is not supported"
+                            f"non-scalar jax.Array with weak_type=True at {path} is not supported"
                         )
                 assert isinstance(leaf, jax.Array)
                 assert leaf.dtype == like_leaf.dtype
                 assert leaf.shape == like_leaf.shape
 
-            case np.ndarray():
-                leaf = np.frombuffer(
-                    readexact(f, like_leaf.size * like_leaf.dtype.itemsize),
-                    dtype=like_leaf.dtype,
-                )
-                leaf = leaf.reshape(like_leaf.shape)
-                assert isinstance(leaf, np.ndarray)
-                assert leaf.dtype == like_leaf.dtype
-                assert leaf.shape == like_leaf.shape
-
-            case np.generic():
-                assert like_leaf.ndim == 0
-                leaf = np.frombuffer(
-                    readexact(f, like_leaf.nbytes), dtype=like_leaf.dtype
-                )
-                leaf = leaf.reshape(())
-                leaf = leaf.flat[0]
-                assert isinstance(leaf, type(like_leaf))
-                assert leaf.dtype == like_leaf.dtype
-                assert leaf.ndim == 0
-
-            case bool():
-                (leaf,) = struct.unpack("?", readexact(f, 1))
-                assert isinstance(leaf, bool)
-
-            case int():
-                (leaf,) = struct.unpack("q", readexact(f, 8))
-                assert isinstance(leaf, int)
-
-            case float():
-                (leaf,) = struct.unpack("d", readexact(f, 8))
-                assert isinstance(leaf, float)
-
-            case complex():
-                (real, imag) = struct.unpack("dd", readexact(f, 16))
-                leaf = complex(real, imag)
-
             case _:
-                leaf = like_leaf
+                raise TypeError(
+                    f"non-jax.Array leaf of type {type(like_leaf)} at {path} is not supported"
+                )
 
         leaves.append(leaf)
 
