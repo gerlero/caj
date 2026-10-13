@@ -9,8 +9,9 @@ else:
 
 import jax
 import jax.numpy as jnp
-import jaxlib
 from jax.extend.core import Jaxpr
+
+FORMAT = 0
 
 
 def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
@@ -116,7 +117,5 @@ def _dump_jaxpr_consts(jaxpr: Jaxpr, f: Writer[bytes], /) -> None:
 def dump_jaxpr(jaxpr: Jaxpr, f: Writer[bytes], /) -> None:
     assert isinstance(jaxpr, Jaxpr)
 
-    f.write(jax.__version__.encode())
-    f.write(jaxlib.__version__.encode())
     f.write(str(jaxpr).encode())
     _dump_jaxpr_consts(jaxpr, f)
