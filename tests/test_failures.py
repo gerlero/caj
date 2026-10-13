@@ -8,6 +8,23 @@ from caj import cache
 from caj._cache import Cache
 
 
+def test_bad_decorator_args(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="max_bytes"):
+        cache(max_bytes=1)  # ty: ignore[no-matching-overload]
+
+    with pytest.raises(TypeError, match="max_bytes"):
+        cache(max_bytes=None)  # ty: ignore[no-matching-overload]
+
+    with pytest.raises(TypeError, match="os.PathLike"):
+        cache(dir=None)  # ty: ignore[invalid-argument-type]
+
+    with pytest.raises(ValueError, match="max_bytes"):
+        cache(dir=tmp_path, max_bytes=0)
+
+    with pytest.raises(ValueError, match="max_bytes"):
+        cache(dir=tmp_path, max_bytes=-1)
+
+
 def test_oversized_entry(tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
