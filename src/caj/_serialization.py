@@ -24,7 +24,7 @@ def dump_pytree(pytree: object, f: Writer[bytes], /) -> None:
 
             case jax.Array(weak_type=True):
                 raise NotImplementedError(
-                    "non-scalar JAX arrays with weak_type=True are not supported"
+                    "non-scalar jax.Array with weak_type=True is not supported"
                 )
 
             case jax.Array():
@@ -83,11 +83,6 @@ def load_pytree[T](f: Reader[bytes], /, *, like: T) -> T:
                         dtype=like_leaf.dtype,
                     )
                     leaf = leaf.reshape(like_leaf.shape)
-                    if like_leaf.weak_type and not leaf.weak_type:
-                        assert leaf.ndim != 0
-                        raise NotImplementedError(
-                            f"non-scalar jax.Array with weak_type=True at {path} is not supported"
-                        )
                 assert isinstance(leaf, jax.Array)
                 assert leaf.dtype == like_leaf.dtype
                 assert leaf.shape == like_leaf.shape
