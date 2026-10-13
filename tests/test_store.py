@@ -5,12 +5,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from caj._cache import Cache
+from caj._store import Store
 from caj._utils import WriteLimitError
 
 
 def test_cache_read_write(tmp_path: Path) -> None:
-    cache = Cache(tmp_path)
+    cache = Store(tmp_path)
 
     with cache.write("key") as f:
         assert f.write(b"data") == 4
@@ -29,7 +29,7 @@ def test_cache_read_write(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("operation", ["read", "write"])
 def test_error_removes_entry(tmp_path: Path, operation: str) -> None:
-    cache = Cache(tmp_path)
+    cache = Store(tmp_path)
     path = tmp_path / "key.caj"
     if operation == "read":
         path.write_bytes(b"data")
@@ -46,13 +46,13 @@ def test_error_removes_entry(tmp_path: Path, operation: str) -> None:
 
 
 def test_failed_cleanup_does_not_replace_original_exception(tmp_path: Path) -> None:
-    cache = Cache(tmp_path)
+    cache = Store(tmp_path)
     with pytest.raises(ValueError, match="original"), cache._delete_on_error("missing"):
         raise ValueError("original")
 
 
 def test_error_does_not_delete_symlink(tmp_path: Path) -> None:
-    cache = Cache(tmp_path)
+    cache = Store(tmp_path)
     target = tmp_path / "target"
     target.write_bytes(b"data")
     link = tmp_path / "link.caj"
@@ -71,12 +71,12 @@ def test_error_does_not_delete_symlink(tmp_path: Path) -> None:
 
 def test_hit_ignores_missing_entry(tmp_path: Path) -> None:
     [] = tmp_path.iterdir()
-    Cache(tmp_path)._hit("missing")
+    Store(tmp_path)._hit("missing")
     [] = tmp_path.iterdir()
 
 
 def test_write_limit_and_cleanup(tmp_path: Path) -> None:
-    cache = Cache(tmp_path, max_bytes=3)
+    cache = Store(tmp_path, max_bytes=3)
     with cache.write("fits") as f:
         assert f.write(b"a") == 1
         assert f.write(b"bc") == 2
@@ -90,7 +90,7 @@ def test_write_limit_and_cleanup(tmp_path: Path) -> None:
 
 
 def test_cull_evicts_least_recently_used(tmp_path: Path) -> None:
-    cache = Cache(tmp_path, max_bytes=4)
+    cache = Store(tmp_path, max_bytes=4)
     for key, atime in [("a", 1), ("b", 2)]:
         with cache.write(key) as f:
             f.write(b"xx")
@@ -109,7 +109,7 @@ def test_cull_evicts_least_recently_used(tmp_path: Path) -> None:
 
 
 def test_cull_removes_multiple_entries(tmp_path: Path) -> None:
-    cache = Cache(tmp_path, max_bytes=2)
+    cache = Store(tmp_path, max_bytes=2)
     for i, key in enumerate(("a", "b", "c"), start=1):
         path = tmp_path / f"{key}.caj"
         path.write_bytes(b"xx")
@@ -122,7 +122,7 @@ def test_cull_removes_multiple_entries(tmp_path: Path) -> None:
 def test_cull_ignores_other_files_and_directories(tmp_path: Path) -> None:
     (tmp_path / "unrelated.txt").write_bytes(b"x" * 100)
     (tmp_path / "directory.caj").mkdir()
-    cache = Cache(tmp_path, max_bytes=2)
+    cache = Store(tmp_path, max_bytes=2)
 
     with cache.write("key") as f:
         f.write(b"xx")
@@ -133,7 +133,7 @@ def test_cull_ignores_other_files_and_directories(tmp_path: Path) -> None:
 
 
 def test_cull_warns_if_directory_cannot_be_listed(tmp_path: Path) -> None:
-    cache = Cache(tmp_path / "missing", max_bytes=1)
+    cache = Store(tmp_path / "missing", max_bytes=1)
     with pytest.warns(RuntimeWarning, match="unable to list files"):
         cache._cull()
 
@@ -149,13 +149,13 @@ def test_cull_skips_unreadable_entry(
 
     with monkeypatch.context() as m:
         m.setattr(os, "scandir", lambda _: contextlib.nullcontext([entry]))
-        Cache(tmp_path, max_bytes=1)._cull()
+        Store(tmp_path, max_bytes=1)._cull()
 
 
 def test_cull_warns_if_entry_cannot_be_deleted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cache = Cache(tmp_path, max_bytes=2)
+    cache = Store(tmp_path, max_bytes=2)
     path = tmp_path / "locked.caj"
     path.write_bytes(b"abcd")
     original_unlink = Path.unlink

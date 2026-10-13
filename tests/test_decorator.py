@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import pytest
 
 from caj import cache
-from caj._cache import Cache
+from caj._store import Store
 
 
 def _maybe_jit[**P, R](jit: bool, /) -> Callable[[Callable[P, R]], Callable[P, R]]:
@@ -345,7 +345,7 @@ def test_entry_created_concurrently(
     def error(*args: object, **kwargs: object) -> NoReturn:
         raise FileNotFoundError
 
-    monkeypatch.setattr(Cache, "read", error)
+    monkeypatch.setattr(Store, "read", error)
 
     assert f(x) == 2.0
     [entry] = tmp_path.glob("*.caj")
@@ -374,7 +374,7 @@ def test_entry_read_error(
     def error(*args: object, **kwargs: object) -> NoReturn:
         raise OSError
 
-    monkeypatch.setattr(Cache, "read", error)
+    monkeypatch.setattr(Store, "read", error)
 
     with pytest.warns(RuntimeWarning, match="caj:.*failed to load"):
         assert f(x) == 2.0
@@ -400,7 +400,7 @@ def test_entry_write_error(
     def error(*args: object, **kwargs: object) -> NoReturn:
         raise OSError
 
-    monkeypatch.setattr(Cache, "write", error)
+    monkeypatch.setattr(Store, "write", error)
 
     with pytest.warns(RuntimeWarning, match="caj:.*failed to save"):
         assert f(x) == 2.0
