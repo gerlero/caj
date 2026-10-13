@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "caj"
-version = "0.0.5"
+version = "0.0.6"
 license = "Apache-2.0"
 authors = [{ name = "Gabriel S. Gerlero", email = "ggerlero@cimec.unl.edu.ar" }]
 description = "Persistent, code-aware caching for JAX functions"
