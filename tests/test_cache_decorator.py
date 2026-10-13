@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
 
@@ -10,9 +11,17 @@ from caj import cache
 from caj._cache import Cache
 
 
-def test_basic(tmp_path: Path) -> None:
+def _maybe_jit[**P, R](jit: bool, /) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    if jit:
+        return jax.jit
+    return lambda f: f
+
+
+@pytest.mark.parametrize("jit", [False, True])
+def test_basic(jit: bool, tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
@@ -44,13 +53,19 @@ def test_basic(tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
-def test_different_functions_create_different_entries(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit1", [False, True])
+@pytest.mark.parametrize("jit2", [False, True])
+def test_different_functions_create_different_entries(
+    jit1: bool, jit2: bool, tmp_path: Path
+) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit1)
     @cache(dir=tmp_path)
     def add_two(x):
         return x + 2
 
+    @_maybe_jit(jit2)
     @cache(dir=tmp_path)
     def times_two(x):
         return x * 2
@@ -64,7 +79,9 @@ def test_different_functions_create_different_entries(tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
-def test_random_keys(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_random_keys(jit: bool, tmp_path: Path) -> None:
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(key):
         return jax.random.normal(key)
@@ -74,9 +91,12 @@ def test_random_keys(tmp_path: Path) -> None:
     assert jnp.allclose(f(key), f(key))
 
 
-def test_pytree_leaf_order(tmp_path):
+@pytest.mark.parametrize("jit1", [False, True])
+@pytest.mark.parametrize("jit2", [False, True])
+def test_pytree_leaf_order(jit1: bool, jit2: bool, tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit1)
     @cache(dir=tmp_path)
     def f1(xs):
         a, b = xs
@@ -84,6 +104,7 @@ def test_pytree_leaf_order(tmp_path):
 
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit2)
     @cache(dir=tmp_path)
     def f2(xs):
         b, a = xs
@@ -104,12 +125,13 @@ def test_pytree_leaf_order(tmp_path):
     [_, _, _] = tmp_path.glob("*.caj")
 
 
-def test_nested_jaxpr_consts(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_nested_jaxpr_consts(jit: bool, tmp_path: Path) -> None:
     def make_f(value):
         a = jnp.array([value])
 
+        @_maybe_jit(jit)
         @cache(dir=tmp_path)
-        @jax.jit
         def f(x):
             return x + a
 
@@ -125,17 +147,21 @@ def test_nested_jaxpr_consts(tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
-def test_no_input_confusion(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit1", [False, True])
+@pytest.mark.parametrize("jit2", [False, True])
+def test_no_input_confusion(jit1: bool, jit2: bool, tmp_path: Path) -> None:
     x = {"a": jnp.array([1.0, 2.0]), "b": jnp.array([3.0, 4.0])}
 
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit1)
     @cache(dir=tmp_path)
     def f1(x):
         return x["a"]
 
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit2)
     @cache(dir=tmp_path)
     def f2(x):
         return x["b"]
@@ -149,19 +175,23 @@ def test_no_input_confusion(tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
-def test_static_field_in_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit1", [False, True])
+@pytest.mark.parametrize("jit2", [False, True])
+def test_static_field_in_output(jit1: bool, jit2: bool, tmp_path: Path) -> None:
     class Class(eqx.Module):
         static: int = eqx.field(static=True)
         dynamic: jax.Array
 
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit1)
     @cache(dir=tmp_path)
     def f1(x):
         return Class(static=1, dynamic=x)
 
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit2)
     @cache(dir=tmp_path)
     def f2(x):
         return Class(static=2, dynamic=x)
@@ -193,10 +223,12 @@ def test_static_field_in_output(tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
-def test_cache_dir_creation(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_cache_dir_creation(jit: bool, tmp_path: Path) -> None:
     dir = tmp_path / "non_existent"
     assert not dir.exists()
 
+    @_maybe_jit(jit)
     @cache(dir=dir)
     def f(x):
         return x + 1
@@ -211,7 +243,9 @@ def test_cache_dir_creation(tmp_path: Path) -> None:
     assert entry.exists()
 
 
-def test_culling(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_culling(jit: bool, tmp_path: Path) -> None:
+    @_maybe_jit(jit)
     @cache(dir=tmp_path, max_bytes=25)
     def f(x):
         return x + 1
@@ -245,9 +279,11 @@ def test_bad_decorator_args(tmp_path: Path) -> None:
         cache(dir=tmp_path, max_bytes=-1)
 
 
-def test_oversized_entry(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_oversized_entry(jit: bool, tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path, max_bytes=1)
     def f(x):
         return x + 1
@@ -260,9 +296,11 @@ def test_oversized_entry(tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
 
-def test_incomplete_entry(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_incomplete_entry(jit: bool, tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
@@ -285,11 +323,13 @@ def test_incomplete_entry(tmp_path: Path) -> None:
     assert entry.stat().st_size == size
 
 
+@pytest.mark.parametrize("jit", [False, True])
 def test_entry_created_concurrently(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    jit: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
@@ -312,9 +352,13 @@ def test_entry_created_concurrently(
     assert entry.stat().st_mtime_ns == mtime_ns
 
 
-def test_entry_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_entry_read_error(
+    jit: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
@@ -338,9 +382,13 @@ def test_entry_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert entry.stat().st_size == size
 
 
-def test_entry_write_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_entry_write_error(
+    jit: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
@@ -359,9 +407,11 @@ def test_entry_write_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     [] = tmp_path.glob("*.caj")
 
 
-def test_entry_too_long(tmp_path: Path) -> None:
+@pytest.mark.parametrize("jit", [False, True])
+def test_entry_too_long(jit: bool, tmp_path: Path) -> None:
     [] = tmp_path.glob("*.caj")
 
+    @_maybe_jit(jit)
     @cache(dir=tmp_path)
     def f(x):
         return x + 1
