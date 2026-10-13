@@ -25,6 +25,10 @@ DEFAULT_CACHE_MAX_BYTES = 1_000_000_000
 _MISSING = sentinel("_MISSING")
 
 
+class _InvalidCacheEntryError(Exception):
+    pass
+
+
 @overload
 def cache[**P, R](func: Callable[P, R], /) -> Callable[P, R]: ...
 
@@ -95,10 +99,12 @@ def cache[**P, R](
                 with cache.read(key) as f:
                     ret = load_pytree(f, like=ret_shape)
                     if f.read(1):
-                        raise RuntimeError("extra data after reading cached entry")
+                        raise _InvalidCacheEntryError(
+                            "unexpected extra data in cached entry"
+                        )
             except (FileNotFoundError, EOFError):
                 pass
-            except (OSError, RuntimeError) as e:
+            except (OSError, _InvalidCacheEntryError) as e:
                 warn(
                     f"{__package__}: failed to load cached entry: {e}",
                     RuntimeWarning,
