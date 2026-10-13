@@ -1,7 +1,7 @@
 <div align="center">
   <a href="https://github.com/gerlero/caj"><img src="https://raw.githubusercontent.com/gerlero/caj/main/logo.png" alt="caj" width="200"/></a>
 
-  **Automatic persistent caching for JAX function invocations**
+  **Persistent, code-aware caching for JAX functions**
 
   [![CI](https://github.com/gerlero/caj/actions/workflows/ci.yml/badge.svg)](https://github.com/gerlero/caj/actions/workflows/ci.yml)
   [![Codecov](https://codecov.io/gh/gerlero/caj/branch/main/graph/badge.svg)](https://codecov.io/gh/gerlero/caj)
