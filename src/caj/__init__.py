@@ -14,8 +14,8 @@ from platformdirs import user_cache_path
 if sys.version_info < (3, 15):
     from typing_extensions import sentinel
 
-from ._cache import Cache
 from ._serialization import FORMAT, dump_jaxpr, dump_pytree, load_pytree
+from ._store import Store
 from ._utils import HashWriter, WriteLimitError
 
 DEFAULT_CACHE_DIR = user_cache_path(__package__)
@@ -69,7 +69,7 @@ def cache[**P, R](
         dir = DEFAULT_CACHE_DIR
         max_bytes = DEFAULT_CACHE_MAX_BYTES
 
-    cache = Cache(dir, max_bytes=max_bytes)
+    store = Store(dir, max_bytes=max_bytes)
 
     def decorator(func: Callable[P, R], /) -> Callable[P, R]:
         jaxpr_func = jax.make_jaxpr(func, return_shape=True)
@@ -93,7 +93,7 @@ def cache[**P, R](
                 key = hasher.hexdigest()
 
                 try:
-                    with cache.read(key) as f:
+                    with store.read(key) as f:
                         ret = load_pytree(f, like=ret_shape)
                         if f.read(1):
                             raise _InvalidCacheEntryError(
@@ -113,13 +113,13 @@ def cache[**P, R](
                 ret = func(*args, **kwargs)
 
                 try:
-                    with cache.write(key) as f:
+                    with store.write(key) as f:
                         dump_pytree(ret, f)
                 except FileExistsError:
                     pass
                 except (OSError, WriteLimitError) as e:
                     warn(
-                        f"{__package__}: failed to save cache to {cache.dir}: {e}",
+                        f"{__package__}: failed to save cache to {store.dir}: {e}",
                         RuntimeWarning,
                         stacklevel=2,
                     )

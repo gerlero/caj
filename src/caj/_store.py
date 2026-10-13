@@ -15,7 +15,7 @@ else:
 from ._utils import BoundedWriter
 
 
-class Cache:
+class Store:
     _SUFFIX = f".{__package__}"
 
     def __init__(self, dir: Path, /, *, max_bytes: int | None = None) -> None:
