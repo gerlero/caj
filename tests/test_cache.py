@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 
@@ -142,4 +143,48 @@ def test_no_input_confusion(tmp_path: Path) -> None:
     [_] = tmp_path.glob("*.caj")
 
     f2(x)
+    [_, _] = tmp_path.glob("*.caj")
+
+
+def test_static_field_in_output(tmp_path: Path) -> None:
+    class Class(eqx.Module):
+        static: int = eqx.field(static=True)
+        dynamic: jax.Array
+
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f1(x):
+        return Class(static=1, dynamic=x)
+
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f2(x):
+        return Class(static=2, dynamic=x)
+
+    [] = tmp_path.glob("*.caj")
+
+    y1 = f1(jnp.array([10.0]))
+    assert isinstance(y1, Class)
+    assert y1.dynamic == jnp.array([10.0])
+    assert y1.static == 1
+    [_] = tmp_path.glob("*.caj")
+
+    y2 = f2(jnp.array([10.0]))
+    assert isinstance(y2, Class)
+    assert y2.dynamic == jnp.array([10.0])
+    assert y2.static == 2
+    [_] = tmp_path.glob("*.caj")
+
+    y2b = f2(jnp.array([20.0]))
+    assert isinstance(y2b, Class)
+    assert y2b.dynamic == jnp.array([20.0])
+    assert y2b.static == 2
+    [_, _] = tmp_path.glob("*.caj")
+
+    y1b = f1(jnp.array([20.0]))
+    assert isinstance(y1b, Class)
+    assert y1b.dynamic == jnp.array([20.0])
+    assert y1b.static == 1
     [_, _] = tmp_path.glob("*.caj")
