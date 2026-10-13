@@ -1,10 +1,13 @@
 from pathlib import Path
+from typing import NoReturn
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import pytest
 
 from caj import cache
+from caj._cache import Cache
 
 
 def test_basic(tmp_path: Path) -> None:
@@ -188,3 +191,142 @@ def test_static_field_in_output(tmp_path: Path) -> None:
     assert y1b.dynamic == jnp.array([20.0])
     assert y1b.static == 1
     [_, _] = tmp_path.glob("*.caj")
+
+
+def test_file_too_short(tmp_path: Path) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    size = entry.stat().st_size
+
+    entry.write_bytes(entry.read_bytes()[:-1])
+    assert entry.stat().st_size == size - 1
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    assert entry.stat().st_size == size
+
+
+def test_file_too_long(tmp_path: Path) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    size = entry.stat().st_size
+
+    entry.write_bytes(entry.read_bytes() + b"\x00")
+    assert entry.stat().st_size == size + 1
+
+    with pytest.warns(RuntimeWarning, match="failed to load cached entry"):
+        assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    assert entry.stat().st_size == size
+
+
+def test_file_created_before_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    mtime_ns = entry.stat().st_mtime_ns
+
+    def error(*args: object, **kwargs: object) -> NoReturn:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(Cache, "read", error)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    assert entry.stat().st_mtime_ns == mtime_ns
+
+
+def test_file_read_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    size = entry.stat().st_size
+
+    def error(*args: object, **kwargs: object) -> NoReturn:
+        raise OSError
+
+    monkeypatch.setattr(Cache, "read", error)
+
+    with pytest.warns(RuntimeWarning, match="failed to load cached entry"):
+        assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    assert entry.stat().st_size == size
+
+
+def test_file_write_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    def error(*args: object, **kwargs: object) -> NoReturn:
+        raise OSError
+
+    monkeypatch.setattr(Cache, "write", error)
+
+    with pytest.warns(RuntimeWarning, match="failed to save cache"):
+        assert f(x) == 2.0
+    [] = tmp_path.glob("*.caj")
+
+
+def test_non_existent_cache_dir(tmp_path: Path) -> None:
+    non_existent_dir = tmp_path / "non_existent"
+    assert not non_existent_dir.exists()
+
+    @cache(dir=non_existent_dir)
+    def f(x):
+        return x + 1
+
+    assert not non_existent_dir.exists()
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    assert non_existent_dir.is_dir()
+    [entry] = non_existent_dir.glob("*.caj")
+    assert entry.exists()
