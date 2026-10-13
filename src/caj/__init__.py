@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import overload
 from warnings import warn
 
+import jaxlib
+
 if sys.version_info < (3, 15):
     from typing_extensions import sentinel
 
@@ -14,7 +16,7 @@ import jax
 from platformdirs import user_cache_path
 
 from ._cache import Cache
-from ._serialization import dump_jaxpr, dump_pytree, load_pytree
+from ._serialization import FORMAT, dump_jaxpr, dump_pytree, load_pytree
 from ._utils import HashWriter, WriteLimitError
 
 DEFAULT_CACHE_DIR = user_cache_path(__package__)
@@ -77,6 +79,10 @@ def cache[**P, R](
             jaxpr, ret_shape = jaxpr_func(*args, **kwargs)
 
             h = hashlib.blake2b(digest_size=16)
+
+            h.update(FORMAT.to_bytes())
+            h.update(jax.__version__.encode())
+            h.update(jaxlib.__version__.encode())
 
             f = HashWriter(h)
             dump_jaxpr(jaxpr, f)
