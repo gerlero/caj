@@ -18,12 +18,12 @@
 Unlike caches based only on function arguments, **caj** also uses JAX's traced computation to identify cached results. Changes to a function's computation—including changes in any other functions it calls—automatically invalidate the corresponding cached results.
 
 ```python
+import caj
 import jax
 import jax.numpy as jnp
-from caj import cache
 
 
-@cache
+@caj.cache
 @jax.jit
 def compute(x):
     return jnp.linalg.eigvalsh(x)
