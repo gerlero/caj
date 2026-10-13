@@ -7,7 +7,7 @@ name = "caj"
 version = "0.0.3"
 license = "Apache-2.0"
 authors = [{ name = "Gabriel S. Gerlero", email = "ggerlero@cimec.unl.edu.ar" }]
-description = "Automatic persistent caching for JAX-based computations"
+description = "Persistent, code-aware caching for JAX functions"
 readme = "README.md"
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -45,3 +45,7 @@ dev = [
     {include-group = "typing"},
     {include-group = "test"},
 ]
+
+[project.urls]
+Homepage = "https://github.com/gerlero/caj"
+Repository = "https://github.com/gerlero/caj"
