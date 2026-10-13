@@ -24,7 +24,6 @@ import jax.numpy as jnp
 
 
 @caj.cache
-@jax.jit
 def compute(x):
     return jnp.linalg.eigvalsh(x)
 
@@ -52,7 +51,6 @@ import caj
 
 
 @caj.cache
-@jax.jit
 def f(x): ...
 ```
 
@@ -88,3 +86,7 @@ When a size limit is enabled, least-recently-used entries are removed as necessa
 **caj** identifies cached results using a hash of the traced JAX computation, its input values, and the JAX and jaxlib versions. This allows it to reuse results even across Python sessions while automatically invalidating cached results when the computation changes.
 
 Unlike JAX's persistent compilation cache, which stores compiled executables, **caj** stores the results of computations themselves.
+
+## Compatibility with [`@jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit)
+
+`@caj.cache` is compatible with `@jax.jit`: it can be applied to JIT-compiled functions, and it can even be used inside JIT-compiled code (with caching operations performed via [JAX callbacks](https://docs.jax.dev/en/latest/_autosummary/jax.pure_callback.html#jax-pure-callback)). Note that using `@caj.cache` on a function will not apply `@jax.jit` automatically, even though JIT-compatibility is generally required for functions to work with `@caj.cache`.

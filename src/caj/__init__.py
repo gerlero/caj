@@ -7,13 +7,12 @@ from pathlib import Path
 from typing import overload
 from warnings import warn
 
+import jax
 import jaxlib
+from platformdirs import user_cache_path
 
 if sys.version_info < (3, 15):
     from typing_extensions import sentinel
-
-import jax
-from platformdirs import user_cache_path
 
 from ._cache import Cache
 from ._serialization import FORMAT, dump_jaxpr, dump_pytree, load_pytree
@@ -58,7 +57,6 @@ def cache[**P, R](
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     if dir is not _MISSING:
         dir = Path(dir).absolute()
-
         if max_bytes is _MISSING:
             max_bytes = DEFAULT_CACHE_MAX_BYTES
         elif max_bytes is not None and max_bytes <= 0:
@@ -79,55 +77,56 @@ def cache[**P, R](
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             args, kwargs = jax.device_put((args, kwargs))
-
             jaxpr, ret_shape = jaxpr_func(*args, **kwargs)
 
-            h = hashlib.blake2b(digest_size=16)
+            base_hasher = hashlib.blake2b(digest_size=16)
+            base_hasher.update(FORMAT.to_bytes())
+            base_hasher.update(jax.__version__.encode())
+            base_hasher.update(jaxlib.__version__.encode())
+            dump_jaxpr(jaxpr, HashWriter(base_hasher))
 
-            h.update(FORMAT.to_bytes())
-            h.update(jax.__version__.encode())
-            h.update(jaxlib.__version__.encode())
+            def callback(*args: P.args, **kwargs: P.kwargs) -> R:
+                hasher = base_hasher.copy()
+                f = HashWriter(hasher)
+                dump_pytree(args, f)
+                dump_pytree(kwargs, f)
+                key = hasher.hexdigest()
 
-            f = HashWriter(h)
-            dump_jaxpr(jaxpr, f)
-            dump_pytree(args, f)
-            dump_pytree(kwargs, f)
+                try:
+                    with cache.read(key) as f:
+                        ret = load_pytree(f, like=ret_shape)
+                        if f.read(1):
+                            raise _InvalidCacheEntryError(
+                                "unexpected extra data in cached entry"
+                            )
+                except (FileNotFoundError, EOFError):
+                    pass
+                except (OSError, _InvalidCacheEntryError) as e:
+                    warn(
+                        f"{__package__}: failed to load cached entry: {e}",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    return ret
 
-            key = h.hexdigest()
+                ret = func(*args, **kwargs)
 
-            try:
-                with cache.read(key) as f:
-                    ret = load_pytree(f, like=ret_shape)
-                    if f.read(1):
-                        raise _InvalidCacheEntryError(
-                            "unexpected extra data in cached entry"
-                        )
-            except (FileNotFoundError, EOFError):
-                pass
-            except (OSError, _InvalidCacheEntryError) as e:
-                warn(
-                    f"{__package__}: failed to load cached entry: {e}",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-            else:
+                try:
+                    with cache.write(key) as f:
+                        dump_pytree(ret, f)
+                except FileExistsError:
+                    pass
+                except (OSError, WriteLimitError) as e:
+                    warn(
+                        f"{__package__}: failed to save cache to {cache.dir}: {e}",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+
                 return ret
 
-            ret = func(*args, **kwargs)
-
-            try:
-                with cache.write(key) as f:
-                    dump_pytree(ret, f)
-            except FileExistsError:
-                pass
-            except (OSError, WriteLimitError) as e:
-                warn(
-                    f"{__package__}: failed to save cache to {cache.dir}: {e}",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-            return ret
+            return jax.pure_callback(callback, ret_shape, *args, **kwargs)
 
         return wrapper
 
