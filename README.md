@@ -13,9 +13,9 @@
   [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/caj)](https://pypi.org/project/caj/)
 </div>
 
-**caj** is a simple persistent cache for JAX-based code.
+**caj** is a lightweight persistent cache for [JAX](https://github.com/jax-ml/jax)-based functions. It stores computation results on disk and reuses them even across Python sessions, avoiding repeated expensive computations.
 
-Decorate a function with `@cache`, and **caj** will store the return on disk. Later calls with the same inputs will load the result directly from the cache instead of performing the computation again.
+Unlike caches based only on function arguments, **caj** also uses JAX's traced computation to identify cached results. Changes to a function's computation—including changes in any other functions it calls—automatically invalidate the corresponding cached results.
 
 ```python
 import jax
@@ -31,16 +31,13 @@ def compute(x):
 
 x = jnp.eye(1000)
 
-y = compute(x)
+y = compute(x)  # First call computes and caches the result
+y = compute(x)  # Following calls just load the cached result
 ```
-
-Running the above code twice will only compute the eigenvalues once: the second time, **caj** will just load the result from disk.
-
-**caj** takes advantage of the computation tracing provided by JAX so it can detect changes in the decorated function or any other functions it calls and not return cached results that were computed with different code.
 
 ## Installation
 
-Install **caj** from PyPI:
+Install **caj** from [PyPI](https://pypi.org/project/caj/):
 
 ```console
 pip install caj
@@ -48,37 +45,46 @@ pip install caj
 
 ## Usage
 
-For most uses, the default cache is enough:
+Simply decorate a JAX-based function with `@caj.cache`:
 
 ```python
-from caj import cache
+import caj
 
 
-@cache
+@caj.cache
+@jax.jit
 def f(x): ...
 ```
 
-By default, **caj** stores entries in a per-user cache directory and limits the cache to **1 GB**.
+**Note:** adding [`@jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit) is optional. If `@jax.jit` is used, it should be placed below `@caj.cache` (as the latter is not itself JIT-compatible). It is recommended to use `@jax.jit` for performance, since functions that are not JIT-compatible will generally not work with `@caj.cache` either.
 
-A custom cache directory can be specified with `dir`:
+By default, **caj** stores results in a per-user cache directory, with a shared size limit of **1 GB**.
+
+To use a custom directory:
 
 ```python
-@cache(dir=".cache")
+@caj.cache(dir=".cache")
 def f(x): ...
 ```
 
-The maximum size of a custom cache can also be configured via `max_bytes`:
+The maximum cache size can also be configured:
 
 ```python
-@cache(dir=".cache", max_bytes=2_000_000_000)
+@caj.cache(dir=".cache", max_bytes=2_000_000_000)
 def f(x): ...
 ```
 
-Or, set `max_bytes=None` for no size limit:
+Set `max_bytes=None` for an unlimited cache:
 
 ```python
-@cache(dir=".cache", max_bytes=None)
+@caj.cache(dir=".cache", max_bytes=None)
 def f(x): ...
 ```
 
-When a size limit is enabled, **caj** will remove the least recently used entries as necessary to keep the cache within the target size.
+When a size limit is enabled, least-recently-used entries are removed as necessary to make room for new results.
+
+## How it works
+
+**caj** identifies cached results using a hash of the traced JAX computation, its input values, and the JAX and jaxlib versions. This allows it to reuse results even across Python sessions while automatically invalidating cached results when the computation changes.
+
+Unlike JAX's persistent compilation cache, which stores compiled executables, **caj** stores the results of computations themselves.
