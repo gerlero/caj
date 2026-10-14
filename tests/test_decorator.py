@@ -53,6 +53,45 @@ def test_basic(jit: bool, tmp_path: Path) -> None:
     [_, _] = tmp_path.glob("*.caj")
 
 
+@pytest.mark.parametrize("jit", [False, True])
+def test_cache_hit_returns_value_in_stored_entry(jit: bool, tmp_path: Path) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @_maybe_jit(jit)
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    x = jnp.array(1.0)
+
+    assert f(x) == 2.0
+    [entry] = tmp_path.glob("*.caj")
+    prev_st = entry.stat()
+
+    assert entry.read_bytes() == jnp.array(2.0).tobytes()
+    entry.write_bytes(jnp.array(42.0).tobytes())
+
+    assert f(x) == 42.0
+    [_] = tmp_path.glob("*.caj")
+    st = entry.stat()
+    assert st.st_size == prev_st.st_size
+    assert st.st_mtime_ns > prev_st.st_mtime_ns
+    assert st.st_atime_ns > prev_st.st_atime_ns
+    prev_st = st
+
+    assert f(x) == 42.0
+    [_] = tmp_path.glob("*.caj")
+    st = entry.stat()
+    assert st.st_size == prev_st.st_size
+    assert st.st_mtime_ns == prev_st.st_mtime_ns
+    assert st.st_atime_ns > prev_st.st_atime_ns
+
+    assert f(jnp.array(2.0)) == 3.0
+    [_, _] = tmp_path.glob("*.caj")
+
+
 @pytest.mark.parametrize("jit1", [False, True])
 @pytest.mark.parametrize("jit2", [False, True])
 def test_different_functions_create_different_entries(
