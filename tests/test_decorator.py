@@ -119,6 +119,32 @@ def test_different_functions_create_different_entries(
 
 
 @pytest.mark.parametrize("jit", [False, True])
+def test_different_types_create_different_entries(jit: bool, tmp_path: Path) -> None:
+    [] = tmp_path.glob("*.caj")
+
+    @_maybe_jit(jit)
+    @cache(dir=tmp_path)
+    def f(x):
+        return x + 1
+
+    [] = tmp_path.glob("*.caj")
+
+    y = f(0.0)
+    assert y == 1
+    assert isinstance(y, jax.Array)
+    assert y.shape == ()
+    assert y.dtype == jnp.float32
+    [_] = tmp_path.glob("*.caj")
+
+    y = f(0)
+    assert y == 1
+    assert isinstance(y, jax.Array)
+    assert y.shape == ()
+    assert y.dtype == jnp.int32
+    [_, _] = tmp_path.glob("*.caj")
+
+
+@pytest.mark.parametrize("jit", [False, True])
 def test_random_keys(jit: bool, tmp_path: Path) -> None:
     @_maybe_jit(jit)
     @cache(dir=tmp_path)
